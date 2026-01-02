@@ -1,0 +1,105 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:semi="https://irihi.tech/semi"
+             xmlns:mi="using:Material.Icons.Avalonia"
+             x:Class="Elektrykpomocnik.Avalonia.App"
+             xmlns:local="using:Elektrykpomocnik.Avalonia"
+             xmlns:converters="using:Elektrykpomocnik.Avalonia.Converters"
+             RequestedThemeVariant="Dark">
+    <Application.Styles>
+        <semi:SemiTheme Locale="pl-PL" />
+        <mi:MaterialIconStyles />
+        <!-- Modern Card Style - using theme-aware colors -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource SemiGrey1}"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiGrey3}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        
+        <!-- Section Header Style -->
+        <Style Selector="TextBlock.section-header">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Opacity" Value="0.6"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        
+        <!-- Secondary text -->
+        <Style Selector="TextBlock.secondary">
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        
+        <!-- Tertiary text -->
+        <Style Selector="TextBlock.tertiary">
+            <Setter Property="Opacity" Value="0.5"/>
+        </Style>
+        
+        <!-- Accent Button -->
+        <Style Selector="Button.accent">
+            <Setter Property="Background" Value="{DynamicResource SemiBlue5}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style Selector="Button.accent:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SemiBlue4}"/>
+        </Style>
+        <Style Selector="Button.accent:pressed">
+            <Setter Property="Background" Value="{DynamicResource SemiBlue6}"/>
+        </Style>
+        
+        <!-- Toolbar Button -->
+        <Style Selector="Button.toolbar-btn">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.toolbar-btn:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SemiGrey2}"/>
+        </Style>
+        <Style Selector="Button.toolbar-btn:pressed">
+            <Setter Property="Background" Value="{DynamicResource SemiGrey3}"/>
+        </Style>
+        
+        <!-- ToggleButton Toolbar -->
+        <Style Selector="ToggleButton.toolbar-btn">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="ToggleButton.toolbar-btn:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SemiGrey2}"/>
+        </Style>
+        <Style Selector="ToggleButton.toolbar-btn:checked">
+            <Setter Property="Background" Value="{DynamicResource SemiBlue5}"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        
+        <!-- Status indicator -->
+        <Style Selector="Border.status-ok">
+            <Setter Property="Background" Value="{DynamicResource SemiGreen5}"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="12,8"/>
+        </Style>
+        
+        <Style Selector="Border.status-warning">
+            <Setter Property="Background" Value="{DynamicResource SemiOrange5}"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Padding" Value="12,8"/>
+        </Style>
+        
+    </Application.Styles>
+    
+    <Application.Resources>
+        <ResourceDictionary>
+            <converters:SymbolTypeToImageConverter x:Key="SymbolTypeToImageConverter"/>
+            <converters:BoolToTerminalColorConverter x:Key="BoolToTerminalColorConverter"/>
+            <converters:SymbolToLabelPathConverter x:Key="SymbolToLabelPathConverter"/>
+            <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

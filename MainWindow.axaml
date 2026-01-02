@@ -1,0 +1,284 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Elektrykpomocnik.ViewModels"
+        xmlns:models="using:Elektrykpomocnik.Models"
+        xmlns:views="using:Elektrykpomocnik.Avalonia.Views"
+        xmlns:controls="using:Elektrykpomocnik.Avalonia.Controls"
+        xmlns:converters="using:Elektrykpomocnik.Avalonia.Converters"
+        xmlns:mi="using:Material.Icons.Avalonia"
+        x:Class="Elektrykpomocnik.Avalonia.MainWindow"
+        x:Name="RootWindow"
+        mc:Ignorable="d" d:DesignWidth="1400" d:DesignHeight="800"
+        Title="Elektryk Pomocnik"
+        WindowState="Maximized"
+        Width="1400" Height="900"
+        Background="{DynamicResource SemiGrey0}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- TOOLBAR -->
+        <Border Grid.Row="0" Background="{DynamicResource SemiGrey1}" Padding="12,8" 
+                BorderBrush="{DynamicResource SemiGrey3}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Left: File Operations -->
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button Classes="toolbar-btn" Command="{Binding NewProjectCommand}" ToolTip.Tip="Nowy projekt">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="FileDocumentOutline" Width="18" Height="18"/>
+                            <TextBlock Text="Nowy" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="toolbar-btn" Command="{Binding SaveCommand}" ToolTip.Tip="Zapisz projekt">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="ContentSave" Width="18" Height="18"/>
+                            <TextBlock Text="Zapisz" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="toolbar-btn" Command="{Binding LoadCommand}" ToolTip.Tip="Wczytaj projekt">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="FolderOpen" Width="18" Height="18"/>
+                            <TextBlock Text="Wczytaj" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Border Width="1" Background="{DynamicResource SemiGrey3}" Margin="8,4"/>
+                    
+                    <Button Classes="toolbar-btn" Command="{Binding ExportPdfCommand}" ToolTip.Tip="Eksport do PDF">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="FilePdfBox" Width="18" Height="18"/>
+                            <TextBlock Text="Eksport PDF" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Border Width="1" Background="{DynamicResource SemiGrey3}" Margin="8,4"/>
+                    
+                    <!-- Wire drawing toggle -->
+                    <ToggleButton Classes="toolbar-btn" IsChecked="{Binding IsDrawingWire}" Command="{Binding ToggleWireCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="VectorLine" Width="18" Height="18"/>
+                            <TextBlock Text="Rysuj Przewód" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ToggleButton>
+                    <Button Classes="toolbar-btn" Command="{Binding DeleteSelectedCommand}" ToolTip.Tip="Usuń zaznaczone">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="TrashCanOutline" Width="18" Height="18"/>
+                            <TextBlock Text="Usuń" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Border Width="1" Background="{DynamicResource SemiGrey3}" Margin="8,4"/>
+                    
+                    <Button Classes="toolbar-btn" x:Name="BtnDinRail" Click="BtnDinRail_Click" ToolTip.Tip="Generator szyny DIN">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="ViewModule" Width="18" Height="18"/>
+                            <TextBlock Text="Szyna DIN" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+                
+                <!-- Right: Zoom & Settings -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                    <!-- Theme Toggle -->
+                    <Button Classes="toolbar-btn" Command="{Binding ToggleThemeCommand}" ToolTip.Tip="Przełącz motyw jasny/ciemny">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <mi:MaterialIcon Kind="ThemeLightDark" Width="18" Height="18"/>
+                            <TextBlock Text="Motyw" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    
+                    <Border Width="1" Background="{DynamicResource SemiGrey3}" Margin="8,4"/>
+                    
+                    <Button Classes="toolbar-btn" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Pomniejsz">
+                        <mi:MaterialIcon Kind="MagnifyMinus" Width="18" Height="18"/>
+                    </Button>
+                    <Button Classes="toolbar-btn" Command="{Binding ResetZoomCommand}" ToolTip.Tip="Reset zoom">
+                        <mi:MaterialIcon Kind="MagnifyClose" Width="18" Height="18"/>
+                    </Button>
+                    <Button Classes="toolbar-btn" Command="{Binding ZoomInCommand}" ToolTip.Tip="Powiększ">
+                        <mi:MaterialIcon Kind="MagnifyPlus" Width="18" Height="18"/>
+                    </Button>
+                    
+                    <Border Width="1" Background="{DynamicResource SemiGrey3}" Margin="8,4"/>
+                    
+                    <!-- Cross section selector -->
+                    <TextBlock Text="Przekrój:" VerticalAlignment="Center" Classes="secondary" Margin="0,0,6,0"/>
+                    <ComboBox ItemsSource="{Binding AvailableCrossSections}" 
+                              SelectedItem="{Binding SelectedCrossSection}"
+                              Width="75" VerticalAlignment="Center"/>
+                    <TextBlock Text="mm²" VerticalAlignment="Center" Classes="tertiary"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- MAIN CONTENT -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="300"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- LEFT PANEL (Modules Palette) -->
+            <views:ModulesPaletteView Grid.Column="0" IsModulesEnabled="{Binding IsDinRailVisible}"/>
+
+            <!-- CANVAS AREA -->
+            <Border Grid.Column="1" Background="{DynamicResource SemiGrey0}" x:Name="CanvasContainer" ClipToBounds="True"
+                    DragDrop.AllowDrop="True" SizeChanged="CanvasContainer_SizeChanged">
+                
+                <!-- Main Canvas with zoom transform -->
+                <Canvas x:Name="ZoomContainer" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        Width="5000" Height="3000" Background="Transparent">
+                    <Canvas.RenderTransform>
+                        <MatrixTransform/>
+                    </Canvas.RenderTransform>
+                    
+                    <!-- Validation Hint Overlay (centered) -->
+                    <StackPanel Canvas.Left="400" Canvas.Top="300" 
+                                IsVisible="{Binding !IsDinRailVisible}" IsHitTestVisible="False">
+                        <mi:MaterialIcon Kind="ArrowTopLeft" Width="64" Height="64" Foreground="#999" Margin="-200,0,0,0">
+                            <mi:MaterialIcon.RenderTransform>
+                                <RotateTransform Angle="-45"/>
+                            </mi:MaterialIcon.RenderTransform>
+                        </mi:MaterialIcon>
+                        <TextBlock Text="Zacznij tutaj" FontSize="24" FontWeight="Light" Foreground="#666" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Wygeneruj szynę DIN aby rozpocząć projektowanie" FontSize="16" Foreground="#888" HorizontalAlignment="Center" Margin="0,8"/>
+                    </StackPanel>
+
+                    <!-- DIN Rail View - directly on Canvas -->
+                    <controls:DinRailView x:Name="DinRailDisplay"
+                                          Canvas.Left="0" Canvas.Top="0"
+                                          IsVisible="{Binding IsDinRailVisible}"
+                                          IsHitTestVisible="False"/>
+
+                    <!-- SYMBOLS LAYER -->
+                    <ItemsControl ItemsSource="{Binding Symbols}" Canvas.Left="0" Canvas.Top="0" ClipToBounds="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas ClipToBounds="False"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.Styles>
+                            <Style Selector="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding X}"/>
+                                <Setter Property="Canvas.Top" Value="{Binding Y}"/>
+                            </Style>
+                        </ItemsControl.Styles>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <controls:SymbolControl MainContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- MARQUEE SELECTION LAYER -->
+                    <Border x:Name="SelectionRectangle"
+                            BorderBrush="{DynamicResource SemiBlue5}"
+                            BorderThickness="1.5"
+                            Background="#330078D7"
+                            IsVisible="False"
+                            CornerRadius="2" />
+
+                    <!-- DRAG PREVIEW OVERLAY -->
+                    <Border x:Name="DragPreviewBorder" 
+                            IsVisible="False"
+                            Opacity="0.85">
+                        <Image x:Name="DragPreviewImage" 
+                               Width="60" Height="120"
+                               Stretch="Uniform"/>
+                    </Border>
+                </Canvas>
+            </Border>
+
+            <!-- RIGHT PANEL -->
+            <Border Grid.Column="2" Background="{DynamicResource SemiGrey1}" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource SemiGrey3}">
+                <TabControl Margin="0" Padding="0">
+                    <TabControl.Styles>
+                        <Style Selector="TabItem">
+                            <Setter Property="Padding" Value="16,12"/>
+                            <Setter Property="FontSize" Value="13"/>
+                        </Style>
+                    </TabControl.Styles>
+                    
+                    <!-- TAB 1: Konfiguracja -->
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <mi:MaterialIcon Kind="Cog" Width="16" Height="16"/>
+                                <TextBlock Text="Konfiguracja"/>
+                            </StackPanel>
+                        </TabItem.Header>
+                        <views:PowerConfigPanel/>
+                    </TabItem>
+                    
+                    <!-- TAB 2: Obwody -->
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <mi:MaterialIcon Kind="PowerPlug" Width="16" Height="16"/>
+                                <TextBlock Text="Obwody"/>
+                            </StackPanel>
+                        </TabItem.Header>
+                        <views:GroupedCircuitsPanel x:Name="PnlGroupedCircuits"/>
+                    </TabItem>
+                    
+                    <!-- TAB 3: Bilans -->
+                    <TabItem>
+                        <TabItem.Header>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <mi:MaterialIcon Kind="ChartBar" Width="16" Height="16"/>
+                                <TextBlock Text="Bilans"/>
+                            </StackPanel>
+                        </TabItem.Header>
+                        <views:PowerBalancePanel x:Name="PnlPowerBalance"/>
+                    </TabItem>
+                </TabControl>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Background="{DynamicResource SemiGrey1}" Padding="16,10" 
+                BorderBrush="{DynamicResource SemiGrey3}" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <mi:MaterialIcon Kind="CheckCircle" Width="16" Height="16" Foreground="{DynamicResource SemiGreen5}"/>
+                    <TextBlock Text="{Binding StatusMessage}" Classes="secondary" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="24">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <mi:MaterialIcon Kind="Shape" Width="14" Height="14" Classes="tertiary"/>
+                        <TextBlock Classes="secondary" FontSize="12" VerticalAlignment="Center"
+                                   Text="{Binding Symbols.Count, StringFormat='Symboli: {0}'}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <mi:MaterialIcon Kind="VectorPolyline" Width="14" Height="14" Classes="tertiary"/>
+                        <TextBlock Classes="secondary" FontSize="12" VerticalAlignment="Center"
+                                   Text="{Binding WireConnections.Count, StringFormat='Połączeń: {0}'}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <mi:MaterialIcon Kind="Magnify" Width="14" Height="14" Classes="tertiary"/>
+                        <TextBlock Classes="secondary" FontSize="12" VerticalAlignment="Center"
+                                   Text="{Binding Zoom, StringFormat='Zoom: {0:P0}'}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
