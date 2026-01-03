@@ -119,6 +119,8 @@
                               SelectedItem="{Binding SelectedCrossSection}"
                               Width="75" VerticalAlignment="Center"/>
                     <TextBlock Text="mm²" VerticalAlignment="Center" Classes="tertiary"/>
+                    
+
                 </StackPanel>
             </Grid>
         </Border>
@@ -159,7 +161,7 @@
 
                     <!-- DIN Rail View - directly on Canvas -->
                     <controls:DinRailView x:Name="DinRailDisplay"
-                                          Canvas.Left="0" Canvas.Top="0"
+                                          Canvas.Left="100" Canvas.Top="250"
                                           IsVisible="{Binding IsDinRailVisible}"
                                           IsHitTestVisible="False"/>
 

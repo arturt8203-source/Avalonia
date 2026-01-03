@@ -1,0 +1,17 @@
+﻿  Trwa określanie projektów do przywrócenia...
+  Przywrócono element C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj (w 886 ms).
+C:\Users\blamp\Desktop\Avalonia\Controls\DinRailView.cs(34,23): error CS0234: Typ lub przestrzeń nazw „Media” nie występuje w przestrzeni nazw „Elektrykpomocnik.Avalonia” (czy nie brakuje odwołania do zestawu?) [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+C:\Users\blamp\Desktop\Avalonia\Controls\DinRailView.cs(35,35): error CS0234: Typ lub przestrzeń nazw „Layout” nie występuje w przestrzeni nazw „Elektrykpomocnik.Avalonia” (czy nie brakuje odwołania do zestawu?) [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+C:\Users\blamp\Desktop\Avalonia\Controls\DinRailView.cs(36,33): error CS0234: Typ lub przestrzeń nazw „Layout” nie występuje w przestrzeni nazw „Elektrykpomocnik.Avalonia” (czy nie brakuje odwołania do zestawu?) [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+C:\Users\blamp\Desktop\Avalonia\MainWindow.axaml.cs(367,45): warning CS8604: Możliwy argument odwołania o wartości null dla parametru „relativeTo” w „Point DragEventArgs.GetPosition(Visual relativeTo)”. [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+
+Kompilacja NIE POWIODŁA SIĘ.
+
+C:\Users\blamp\Desktop\Avalonia\MainWindow.axaml.cs(367,45): warning CS8604: Możliwy argument odwołania o wartości null dla parametru „relativeTo” w „Point DragEventArgs.GetPosition(Visual relativeTo)”. [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+C:\Users\blamp\Desktop\Avalonia\Controls\DinRailView.cs(34,23): error CS0234: Typ lub przestrzeń nazw „Media” nie występuje w przestrzeni nazw „Elektrykpomocnik.Avalonia” (czy nie brakuje odwołania do zestawu?) [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+C:\Users\blamp\Desktop\Avalonia\Controls\DinRailView.cs(35,35): error CS0234: Typ lub przestrzeń nazw „Layout” nie występuje w przestrzeni nazw „Elektrykpomocnik.Avalonia” (czy nie brakuje odwołania do zestawu?) [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+C:\Users\blamp\Desktop\Avalonia\Controls\DinRailView.cs(36,33): error CS0234: Typ lub przestrzeń nazw „Layout” nie występuje w przestrzeni nazw „Elektrykpomocnik.Avalonia” (czy nie brakuje odwołania do zestawu?) [C:\Users\blamp\Desktop\Avalonia\Elektrykpomocnik.Avalonia.csproj]
+    Ostrzeżenia: 1
+    Liczba błędów: 3
+
+Czas, który upłynął: 00:00:02.81

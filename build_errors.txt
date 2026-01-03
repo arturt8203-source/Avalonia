@@ -1,0 +1,9 @@
+﻿  Trwa określanie projektów do przywrócenia...
+  Wszystkie projekty są aktualne na potrzeby przywrócenia.
+  Elektrykpomocnik.Avalonia -> C:\Users\blamp\Desktop\Avalonia\bin\Debug\net10.0\Elektrykpomocnik.Avalonia.dll
+
+Kompilacja powiodła się.
+    Ostrzeżenia: 0
+    Liczba błędów: 0
+
+Czas, który upłynął: 00:00:01.10

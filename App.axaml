@@ -9,6 +9,7 @@
     <Application.Styles>
         <semi:SemiTheme Locale="pl-PL" />
         <mi:MaterialIconStyles />
+
         <!-- Modern Card Style - using theme-aware colors -->
         <Style Selector="Border.card">
             <Setter Property="Background" Value="{DynamicResource SemiGrey1}"/>

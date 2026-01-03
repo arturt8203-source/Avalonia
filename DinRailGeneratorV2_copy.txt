@@ -1,0 +1,186 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Xml.Linq;
+
+namespace Elektrykpomocnik.Avalonia.Services;
+
+/// <summary>
+/// Nowy generator szyny DIN - V2
+/// Tworzy dynamicznie szyn� DIN poprzez kopiowanie i skalowanie templat�w.
+/// Pracuje bezpo�rednio z XDocument - efektywnie i niezawodnie.
+/// </summary>
+public class DinRailGeneratorV2
+{
+    private const string TemplatePath = "Assets/templates/din_rail/din_rail_1x24.svg";
+    private const double ModuleWidthUnits = 5582.085 / 24.0; // ~232.58
+    private const double RowHeightUnits = 1631.102;
+    private const double Margin = 50.0;
+
+    private readonly string _basePath;
+
+    public DinRailGeneratorV2(string? basePath = null)
+    {
+        _basePath = basePath ?? AppDomain.CurrentDomain.BaseDirectory;
+    }
+
+    /// <summary>
+    /// Generuje szyn� DIN dla podanej ilo�ci rz�d�w i modu��w
+    /// </summary>
+    public string Generate(int rows, int modulesPerRow)
+    {
+        if (rows < 1 || modulesPerRow < 1)
+            throw new ArgumentException("Rows and modulesPerRow must be >= 1");
+
+        try
+        {
+            // Za�aduj szablon
+            var templateSvg = LoadTemplate();
+            if (string.IsNullOrEmpty(templateSvg))
+                return GenerateFallback(rows, modulesPerRow);
+
+            // Parsuj SVG
+            var doc = XDocument.Parse(templateSvg);
+            if (doc.Root == null)
+                return GenerateFallback(rows, modulesPerRow);
+
+            // Stw�rz nowy SVG z odpowiednimi wymiarami
+            var result = GenerateScaledRail(doc, rows, modulesPerRow);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[DinRailGeneratorV2] Error: {ex.Message}");
+            return GenerateFallback(rows, modulesPerRow);
+        }
+    }
+
+    /// <summary>
+    /// Oblicza wymiary szyny DIN dla UI
+    /// </summary>
+    public (double Width, double Height) GetDimensions(int rows, int modulesPerRow)
+    {
+        double width = (modulesPerRow * ModuleWidthUnits) + (2 * Margin);
+        double height = (rows * RowHeightUnits) + (2 * Margin);
+        return (width, height);
+    }
+
+    private string GenerateScaledRail(XDocument templateDoc, int rows, int modulesPerRow)
+    {
+        const string svgNs = "http://www.w3.org/2000/svg";
+        var ns = XNamespace.Get(svgNs);
+
+        var (width, height) = GetDimensions(rows, modulesPerRow);
+
+        // Stw�rz nowy root element
+        var newRoot = new XElement(ns + "svg");
+        newRoot.SetAttributeValue("viewBox", $"0 0 {width.ToString(CultureInfo.InvariantCulture)} {height.ToString(CultureInfo.InvariantCulture)}");
+        newRoot.SetAttributeValue("width", "100%");
+        newRoot.SetAttributeValue("height", "100%");
+        newRoot.SetAttributeValue("xmlns", svgNs);
+        newRoot.SetAttributeValue("version", "1.1");
+
+        // Kopiuj defs je�li istniej�
+        var defs = templateDoc.Root?.Element(ns + "defs");
+        if (defs != null)
+        {
+            newRoot.Add(new XElement(defs));
+        }
+
+        // Stw�rz g��wn� grup�
+        var mainGroup = new XElement(ns + "g");
+        mainGroup.SetAttributeValue("id", $"din_rail_{rows}x{modulesPerRow}");
+
+        // Oblicz skal�
+        double scaleX = (modulesPerRow * ModuleWidthUnits) / 5582.085;
+        const double scaleY = 1.0; // wysoko�� bez zmian
+
+        // Zbierz ca�� zawarto�� z templat�w (poza defs)
+        var templateContent = templateDoc.Root?.Elements()
+            .Where(e => e.Name != ns + "defs")
+            .ToList() ?? new List<XElement>();
+
+        // Dla ka�dego rz�du dodaj skalowan� kopi�
+        for (int row = 0; row < rows; row++)
+        {
+            var rowGroup = new XElement(ns + "g");
+            rowGroup.SetAttributeValue("id", $"row_{row}");
+
+            double transY = Margin + (row * RowHeightUnits);
+            string transform = $"translate({Margin.ToString(CultureInfo.InvariantCulture)}, {transY.ToString(CultureInfo.InvariantCulture)}) scale({scaleX.ToString(CultureInfo.InvariantCulture)}, {scaleY.ToString(CultureInfo.InvariantCulture)})";
+            rowGroup.SetAttributeValue("transform", transform);
+
+            // Kopiuj zawarto�� szablonu
+            foreach (var elem in templateContent)
+            {
+                var cloned = new XElement(elem);
+                CleanElementIds(cloned); // usu� duplikaty ID
+                rowGroup.Add(cloned);
+            }
+
+            mainGroup.Add(rowGroup);
+        }
+
+        newRoot.Add(mainGroup);
+
+        return newRoot.ToString(SaveOptions.None);
+    }
+
+    private void CleanElementIds(XElement element)
+    {
+        // Usu� id aby unikn�� konflikt�w przy klonowaniu
+        element.Attribute("id")?.Remove();
+        foreach (var child in element.Elements())
+        {
+            CleanElementIds(child);
+        }
+    }
+
+    private string LoadTemplate()
+    {
+        var paths = new[]
+        {
+            Path.Combine(_basePath, TemplatePath),
+            Path.Combine(Directory.GetCurrentDirectory(), TemplatePath),
+            TemplatePath
+        };
+
+        foreach (var path in paths)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    Console.WriteLine($"[DinRailGeneratorV2] Loaded template from: {path}");
+                    return File.ReadAllText(path);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[DinRailGeneratorV2] Failed to load from {path}: {ex.Message}");
+            }
+        }
+
+        Console.WriteLine("[DinRailGeneratorV2] Template not found in any location");
+        return null!;
+    }
+
+    private string GenerateFallback(int rows, int modulesPerRow)
+    {
+        var (width, height) = GetDimensions(rows, modulesPerRow);
+
+        return $@"<svg viewBox='0 0 {width} {height}' width='100%' height='100%' xmlns='http://www.w3.org/2000/svg'>
+                    <defs>
+                        <style>
+                            .din-rail {{ fill: #ffffff; stroke: #1e1e1c; stroke-width: 2; }}
+                            .din-rail-label {{ fill: #888888; font-size: 14px; font-family: Arial; }}
+                        </style>
+                    </defs>
+                    <rect width='{width}' height='{height}' fill='#f5f5f5' stroke='#cccccc' stroke-width='1'/>
+                    <text x='{width / 2}' y='{height / 2}' text-anchor='middle' class='din-rail-label'>
+                        DIN Rail {rows}x{modulesPerRow}
+                    </text>
+                </svg>";
+    }
+}
+

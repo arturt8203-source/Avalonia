@@ -10,6 +10,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Elektrykpomocnik.Avalonia;
 
@@ -26,6 +27,9 @@ public partial class MainWindow : Window
     // Marquee selection state
     private bool _isSelecting;
     private Point _selectionStartPoint;
+
+    // Skala szyny DIN - stosowana do importowanych modułów
+    private double _dinRailScale = 0.20;
 
     private void CacheControls()
     {
@@ -112,29 +116,33 @@ public partial class MainWindow : Window
                     {
                         if (ext == ".svg")
                         {
-                            var content = System.IO.File.ReadAllText(moduleFilePath);
-
-                            // Calculate size based on zoom level
-                            var normResult = NormalizeSvgAndCalculateSize(content, moduleFilePath);
-
-                            var svgSource = global::Avalonia.Svg.Skia.SvgSource.LoadFromSvg(normResult.NormalizedSvg);
-                            if (svgSource != null)
+                            var importService = new Services.SymbolImportService();
+                            var (image, width, height) = importService.CreateSvgPreview(moduleFilePath);
+                            if (image != null)
                             {
-                                previewImage.Source = new global::Avalonia.Svg.Skia.SvgImage { Source = svgSource };
-                                previewImage.Width = normResult.Width;
-                                previewImage.Height = normResult.Height;
+                                previewImage.Source = image;
+                                // Zastosuj skalę szyny DIN do podglądu
+                                previewImage.Width = width * _dinRailScale;
+                                previewImage.Height = height * _dinRailScale;
                             }
                         }
                         else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                         {
                             using var fs = System.IO.File.OpenRead(moduleFilePath);
-                            previewImage.Source = new global::Avalonia.Media.Imaging.Bitmap(fs);
+                            var bitmap = new global::Avalonia.Media.Imaging.Bitmap(fs);
+                            previewImage.Source = bitmap;
+                            // Zastosuj skalę szyny DIN do podglądu
+                            previewImage.Width = bitmap.Size.Width * _dinRailScale;
+                            previewImage.Height = bitmap.Size.Height * _dinRailScale;
                         }
 
                         previewBorder.IsVisible = true;
                     }
                 }
-                catch { /* Ignore errors */ }
+                catch (Exception ex)
+                {
+                    Services.AppLog.Warn($"Błąd tworzenia podglądu: {moduleFilePath}", ex);
+                }
             }
         }
     }
@@ -160,10 +168,36 @@ public partial class MainWindow : Window
             if (schematicGrid != null)
             {
                 var pos = e.GetPosition(schematicGrid);
+                double finalX = pos.X - previewBorder.Bounds.Width / 2;
+                double finalY = pos.Y - previewBorder.Bounds.Height / 2;
 
-                // Set Position (centered)
-                Canvas.SetLeft(previewBorder, pos.X - previewBorder.Bounds.Width / 2);
-                Canvas.SetTop(previewBorder, pos.Y - previewBorder.Bounds.Height / 2);
+                // --- Magnetic Snap (Preview) ---
+                if (ViewModel.DinRailAxes.Count > 0)
+                {
+                    double moduleCenterY = pos.Y;
+                    double closestAxis = ViewModel.DinRailAxes[0];
+                    double minDistance = Math.Abs(moduleCenterY - closestAxis);
+
+                    foreach (var axis in ViewModel.DinRailAxes)
+                    {
+                        double d = Math.Abs(moduleCenterY - axis);
+                        if (d < minDistance)
+                        {
+                            minDistance = d;
+                            closestAxis = axis;
+                        }
+                    }
+
+                    // Snap threshold matches OnCanvasDrop (80px)
+                    if (minDistance < 80.0)
+                    {
+                        finalY = closestAxis - (previewBorder.Bounds.Height / 2.0);
+                    }
+                }
+
+                // Set Position (centered or snapped)
+                Canvas.SetLeft(previewBorder, finalX);
+                Canvas.SetTop(previewBorder, finalY);
             }
         }
     }
@@ -192,286 +226,82 @@ public partial class MainWindow : Window
 
             // Get position relative to the Grid control (not the border)
             var schematicGrid = _zoomContainer;
-            if (schematicGrid != null)
+            if (schematicGrid != null && !string.IsNullOrEmpty(moduleFilePath))
             {
-                // Get drop position directly relative to the grid (World Coords)
-                var dropPos = e.GetPosition(schematicGrid);
-
-                // Create new Symbol 
-                var newSymbol = new Models.SymbolItem
+                try
                 {
-                    Type = moduleType ?? "Unknown",
-                    Label = moduleName ?? "Module",
-                    VisualPath = moduleFilePath
-                };
+                    // Get drop position directly relative to the grid (World Coords)
+                    var dropPos = e.GetPosition(schematicGrid);
 
-                // Always load Visual from file for consistent scaling
-                if (!string.IsNullOrEmpty(moduleFilePath))
-                {
-                    string ext = System.IO.Path.GetExtension(moduleFilePath).ToLowerInvariant();
-                    string svgContent = "";
+                    // Use SymbolImportService for import
+                    var importService = new Services.SymbolImportService();
+                    var newSymbol = importService.ImportFromFile(moduleFilePath, moduleType, moduleName);
 
-                    try
+                    if (newSymbol != null)
                     {
-                        if (ext == ".svg")
+                        // Skaluj moduł proporcjonalnie do szyny DIN
+                        newSymbol.Width *= _dinRailScale;
+                        newSymbol.Height *= _dinRailScale;
+
+                        // Wycentruj moduł względem kursora (ale pozwól na przyciąganie Y)
+                        double finalX = dropPos.X - newSymbol.Width / 2.0;
+                        double finalY = dropPos.Y - newSymbol.Height / 2.0;
+
+                        // --- MAGNETIC SNAP LOGIC (UPUSZCZANIE) ---
+                        if (ViewModel.DinRailAxes.Count > 0)
                         {
-                            svgContent = System.IO.File.ReadAllText(moduleFilePath);
+                            double moduleCenterY = dropPos.Y; // Kursor jest mniej więcej na środku
+                            double closestAxis = ViewModel.DinRailAxes[0];
+                            double minDistance = Math.Abs(moduleCenterY - closestAxis);
 
-                            // Set default parameters for distribution block
-                            if (moduleFilePath.Contains("blok rozdzielczy", StringComparison.OrdinalIgnoreCase))
+                            foreach (var axis in ViewModel.DinRailAxes)
                             {
-                                if (!newSymbol.Parameters.ContainsKey("BLUE_COVER_VISIBLE"))
-                                    newSymbol.Parameters["BLUE_COVER_VISIBLE"] = "True";
-                            }
-
-                            // Initial Parameter Extraction
-                            // Detect placeholders {{KEY}}
-                            var placeholders = Regex.Matches(svgContent, @"{{([A-Z0-9_]+)}}");
-                            foreach (Match ph in placeholders)
-                            {
-                                string key = ph.Groups[1].Value;
-                                if (!newSymbol.Parameters.ContainsKey(key))
+                                double d = Math.Abs(moduleCenterY - axis);
+                                if (d < minDistance)
                                 {
-                                    // Set defaults based on parameter key and module type
-                                    if (key == "CURRENT") newSymbol.Parameters[key] = "40A";
-                                    else if (key == "SENSITIVITY") newSymbol.Parameters[key] = "30mA";
-                                    else if (key == "TYPE") newSymbol.Parameters[key] = "Typ A";
-                                    else if (key == "LABEL")
-                                    {
-                                        string fileName = System.IO.Path.GetFileNameWithoutExtension(moduleFilePath);
-                                        string labelValue = fileName.Split(' ')[0];
-                                        newSymbol.Parameters[key] = labelValue;
-                                    }
-                                    else if (key == "SUBTEXT") newSymbol.Parameters[key] = "";
-                                    else newSymbol.Parameters[key] = "?";
+                                    minDistance = d;
+                                    closestAxis = axis;
                                 }
                             }
 
-                            // Apply parameters to SVG content
-                            svgContent = ApplyParametersToSvg(svgContent, newSymbol.Parameters);
-
-                            // Calculate dimensions and normalize SVG (e.g. for custom scales like distribution block)
-                            var normResult = NormalizeSvgAndCalculateSize(svgContent, moduleFilePath);
-                            newSymbol.Width = normResult.Width;
-                            newSymbol.Height = normResult.Height;
-                            svgContent = normResult.NormalizedSvg;
-
-                            var svgSource = global::Avalonia.Svg.Skia.SvgSource.LoadFromSvg(svgContent);
-                            if (svgSource != null)
+                            // Próg przyciągania przy upuszczaniu (np. 80px)
+                            if (minDistance < 80.0)
                             {
-                                newSymbol.Visual = new global::Avalonia.Svg.Skia.SvgImage { Source = svgSource };
+                                // Ustaw środek modułu na osi
+                                finalY = closestAxis - (newSymbol.Height / 2.0);
+                                newSymbol.IsSnappedToRail = true;
+                                ViewModel.StatusMessage = $"Dodano: {moduleName} (SNAP)";
+                            }
+                            else
+                            {
+                                newSymbol.IsSnappedToRail = false;
                             }
                         }
-                        else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
-                        {
-                            using var fs = System.IO.File.OpenRead(moduleFilePath);
-                            var bitmap = new global::Avalonia.Media.Imaging.Bitmap(fs);
-                            newSymbol.Visual = bitmap;
-                            newSymbol.Width = bitmap.Size.Width;
-                            newSymbol.Height = bitmap.Size.Height;
-                        }
 
-                        // Center symbol on cursor
-                        newSymbol.X = dropPos.X - newSymbol.Width / 2;
-                        newSymbol.Y = dropPos.Y - newSymbol.Height / 2;
-                    }
-                    catch
-                    {
-                        // Error loading symbol
-                    }
-                }
+                        newSymbol.X = finalX;
+                        newSymbol.Y = finalY;
 
-                ViewModel.Symbols.Add(newSymbol);
-                ViewModel.StatusMessage = $"Dodano: {moduleName} @ ({newSymbol.X:F0}, {newSymbol.Y:F0})";
-            }
-        }
-    }
-
-    private string ApplyParametersToSvg(string svgContent, System.Collections.Generic.Dictionary<string, string> parameters)
-    {
-        string result = svgContent;
-        foreach (var kvp in parameters)
-        {
-            result = result.Replace("{{" + kvp.Key + "}}", kvp.Value);
-        }
-
-        // Logic for "osłona niebieska" toggle (hides cover, danger icon, and text)
-        if (parameters.TryGetValue("BLUE_COVER_VISIBLE", out var visible))
-        {
-            // Remove existing display="none" from relevant elements to start clean
-            result = Regex.Replace(result, @"(<[^>]*id=""(osłona-niebieska|danger)""[^>]*?)\s+display=""none""", "$1");
-            // Improved regex for text cleanup: allows any characters (including <) between start of tag and target text
-            result = Regex.Replace(result, @"(<text[^>]*?)\s+display=""none""(?=[^>]*?>[\s\S]*?lok rozdzielczy)", "$1");
-
-            if (visible == "False")
-            {
-                // Hide ID-based elements (osłona-niebieska and danger)
-                result = Regex.Replace(result, @"(<[^>]*id=""(osłona-niebieska|danger)""[^>]*?)\s*(/?>)", "$1 display=\"none\"$3");
-
-                // Hide the text "blok rozdzielczy" (finding text tag that contains the string somewhere in its body)
-                result = Regex.Replace(result, @"(<text[^>]*?)\s*(?=>[\s\S]*?lok rozdzielczy[\s\S]*?<\/text>)", "$1 display=\"none\"");
-            }
-        }
-
-        return result;
-    }
-
-    public (string NormalizedSvg, double Width, double Height) NormalizeSvgAndCalculateSize(string svgContent, string? filePath)
-    {
-        string result = svgContent;
-        double width = 232.58; // Default 1P (approx 17.5mm)
-        double height = 1103.0; // Default height
-        const double SCALE_FACTOR = 232.58 / 212.0;
-
-        try
-        {
-            bool isDist = filePath != null && filePath.Contains("blok rozdzielczy", StringComparison.OrdinalIgnoreCase);
-
-            double translateX = 0;
-            double translateY = 0;
-            bool hasOuterTranslate = false;
-
-            var outerTranslateMatch = Regex.Match(svgContent, @"<svg[^>]*>\s*<g[^>]*?\btransform\s*=\s*""\s*translate\(\s*([\d\.-]+)\s*(?:,|\s)\s*([\d\.-]+)\s*\)\s*""", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            if (!outerTranslateMatch.Success)
-                outerTranslateMatch = Regex.Match(svgContent, @"<svg[^>]*>\s*<g[^>]*?\btransform\s*=\s*'\s*translate\(\s*([\d\.-]+)\s*(?:,|\s)\s*([\d\.-]+)\s*\)\s*'", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-
-            if (outerTranslateMatch.Success)
-            {
-                translateX = double.Parse(outerTranslateMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-                translateY = double.Parse(outerTranslateMatch.Groups[2].Value, CultureInfo.InvariantCulture);
-                hasOuterTranslate = true;
-            }
-
-            // 1. Detect body rectangle (the largest visible element)
-            var rectMatches = Regex.Matches(svgContent, @"<rect\s+[^>]*>", RegexOptions.IgnoreCase);
-            double maxArea = 0;
-            double bx = 0, by = 0, bw = 0, bh = 0;
-            bool found = false;
-
-            foreach (Match m in rectMatches)
-            {
-                string tag = m.Value;
-                // Ignore invisible containers
-                if (tag.Contains("fill:none", StringComparison.OrdinalIgnoreCase) || tag.Contains("id=\"Page", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var wM = Regex.Match(tag, @"\bwidth\s*=\s*""([\d\.-]+)""", RegexOptions.IgnoreCase);
-                var hM = Regex.Match(tag, @"\bheight\s*=\s*""([\d\.-]+)""", RegexOptions.IgnoreCase);
-                if (wM.Success && hM.Success)
-                {
-                    double w = double.Parse(wM.Groups[1].Value, CultureInfo.InvariantCulture);
-                    double h = double.Parse(hM.Groups[1].Value, CultureInfo.InvariantCulture);
-
-                    if (w * h > maxArea && w > 10 && h > 10)
-                    {
-                        var xM = Regex.Match(tag, @"\bx\s*=\s*""([\d\.-]+)""", RegexOptions.IgnoreCase);
-                        var yM = Regex.Match(tag, @"\by\s*=\s*""([\d\.-]+)""", RegexOptions.IgnoreCase);
-                        bx = xM.Success ? double.Parse(xM.Groups[1].Value, CultureInfo.InvariantCulture) : 0;
-                        by = yM.Success ? double.Parse(yM.Groups[1].Value, CultureInfo.InvariantCulture) : 0;
-                        bw = w; bh = h;
-                        maxArea = w * h;
-                        found = true;
-                    }
-                }
-            }
-
-            // 2. Normalization (Cropping to body)
-            // Safety check: only crop if the detected coordinates are relatively close to original origin.
-            // MCB/RCD often have huge absolute coordinates (e.g. 1650) because of inner translate() groups.
-            // If we crop to those values without accounting for translate, the content disappears.
-            var cropX = bx;
-            var cropY = by;
-            if (hasOuterTranslate)
-            {
-                cropX = bx + translateX;
-                cropY = by + translateY;
-            }
-
-            if (found && cropX < 500 && cropY < 500)
-            {
-                string newViewBox = $"viewBox=\"{cropX.ToString(CultureInfo.InvariantCulture)} {cropY.ToString(CultureInfo.InvariantCulture)} {bw.ToString(CultureInfo.InvariantCulture)} {bh.ToString(CultureInfo.InvariantCulture)}\"";
-
-                // Surgical update of ONLY the first <svg ...> tag to avoid XML damage
-                var svgTagMatch = Regex.Match(result, @"<svg[^>]*?>", RegexOptions.IgnoreCase);
-                if (svgTagMatch.Success)
-                {
-                    string oldTag = svgTagMatch.Value;
-                    string newTag;
-
-                    if (Regex.IsMatch(oldTag, @"\bviewBox\s*=", RegexOptions.IgnoreCase))
-                    {
-                        // Replace existing viewBox (handling both " and ' )
-                        newTag = Regex.Replace(oldTag, @"\bviewBox\s*=\s*""[^""]*""", newViewBox, RegexOptions.IgnoreCase);
-                        newTag = Regex.Replace(newTag, @"\bviewBox\s*=\s*'[^']*'", newViewBox, RegexOptions.IgnoreCase);
+                        ViewModel.Symbols.Add(newSymbol);
+                        ViewModel.StatusMessage = $"Dodano: {moduleName} (skala: {_dinRailScale:P0})";
                     }
                     else
                     {
-                        // Insert new viewBox before the closing >
-                        newTag = oldTag.Insert(oldTag.Length - 1, " " + newViewBox + " ");
+                        ViewModel.StatusMessage = $"Błąd importu: {moduleName}";
                     }
-
-                    result = result.Remove(svgTagMatch.Index, svgTagMatch.Length).Insert(svgTagMatch.Index, newTag);
                 }
-
-                width = bw * SCALE_FACTOR;
-                height = bh * SCALE_FACTOR;
-            }
-            else
-            {
-                // Fallback: extract from original viewBox
-                var vbMatch = Regex.Match(svgContent, @"viewBox\s*=\s*""\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)""", RegexOptions.IgnoreCase);
-                if (!vbMatch.Success)
-                    vbMatch = Regex.Match(svgContent, @"viewBox\s*=\s*'\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)'", RegexOptions.IgnoreCase);
-
-                if (vbMatch.Success)
+                catch (Exception ex)
                 {
-                    double vbW = double.Parse(vbMatch.Groups[3].Value, CultureInfo.InvariantCulture);
-                    double vbH = double.Parse(vbMatch.Groups[4].Value, CultureInfo.InvariantCulture);
-                    width = vbW * SCALE_FACTOR;
-                    height = vbH * SCALE_FACTOR;
+                    Services.AppLog.Error($"Błąd drop symbolu: {moduleFilePath}", ex);
+                    ViewModel.StatusMessage = $"Błąd: {ex.Message}";
                 }
             }
-
-            // 3. Forced dimensions for distribution block
-            if (isDist)
-            {
-                width = 101.0 * 13.29;
-                height = 88.0 * 13.29;
-            }
         }
-        catch (Exception)
-        {
-            // Error loading symbol
-        }
-
-        return (result, width, height);
     }
 
     public void RefreshSymbolVisual(Models.SymbolItem symbol)
     {
-        if (symbol == null || string.IsNullOrEmpty(symbol.VisualPath) || !System.IO.File.Exists(symbol.VisualPath))
-            return;
-
-        try
-        {
-            string content = System.IO.File.ReadAllText(symbol.VisualPath);
-            content = ApplyParametersToSvg(content, symbol.Parameters);
-
-            var normResult = NormalizeSvgAndCalculateSize(content, symbol.VisualPath);
-            symbol.Width = normResult.Width;
-            symbol.Height = normResult.Height;
-            content = normResult.NormalizedSvg;
-
-            var svgSource = global::Avalonia.Svg.Skia.SvgSource.LoadFromSvg(content);
-            if (svgSource != null)
-            {
-                symbol.Visual = new global::Avalonia.Svg.Skia.SvgImage { Source = svgSource };
-            }
-        }
-        catch (Exception)
-        {
-            // Error loading symbol
-        }
+        var importService = new Services.SymbolImportService();
+        importService.RefreshVisual(symbol);
     }
 
     // Context Menu Handler (to be wired up in UI or via command)
@@ -494,41 +324,44 @@ public partial class MainWindow : Window
 
     // ===== MARQUEE SELECTION =====
 
+    // ===== MARQUEE SELECTION (REWRITTEN) =====
+
     private void OnCanvasPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_zoomContainer == null || _selectionRectangle == null) return;
 
-        // If something else handled this (e.g. a SymbolControl), we don't want to clear selection
-        // unless Ctrl is held (which is handled by SymbolControl logic anyway).
-        // However, we might want to start marquee selection if we clicked on a symbol? No.
+        // Check if event was already handled (e.g. by clicking on a symbol)
         if (e.Handled) return;
 
         var point = e.GetCurrentPoint(_zoomContainer);
 
-        // Only start selection on left button
-        if (point.Properties.IsLeftButtonPressed)
+        if (!point.Properties.IsLeftButtonPressed) return;
+
+        // 1. Handle Selection State based on Modifiers
+        bool isModifierHeld = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+
+        if (!isModifierHeld)
         {
-            // Clear previous selection if not holding Ctrl
-            if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            // Clear existing selection if no modifier is held
+            foreach (var s in ViewModel.Symbols)
             {
-                foreach (var symbol in ViewModel.Symbols)
-                {
-                    symbol.IsSelected = false;
-                }
+                s.IsSelected = false;
             }
-
-            _isSelecting = true;
-            _selectionStartPoint = point.Position;
-
-            // Initialize selection rectangle
-            Canvas.SetLeft(_selectionRectangle, _selectionStartPoint.X);
-            Canvas.SetTop(_selectionRectangle, _selectionStartPoint.Y);
-            _selectionRectangle.Width = 0;
-            _selectionRectangle.Height = 0;
-            _selectionRectangle.IsVisible = true;
-
-            e.Handled = true;
         }
+
+        // 2. Start Marquee Selection
+        _isSelecting = true;
+        _selectionStartPoint = point.Position;
+
+        // Reset and show rectangle
+        Canvas.SetLeft(_selectionRectangle, _selectionStartPoint.X);
+        Canvas.SetTop(_selectionRectangle, _selectionStartPoint.Y);
+        _selectionRectangle.Width = 0;
+        _selectionRectangle.Height = 0;
+        _selectionRectangle.IsVisible = true;
+
+        e.Pointer.Capture(_canvasContainer);
+        e.Handled = true;
     }
 
     private void OnCanvasPointerMoved(object? sender, PointerEventArgs e)
@@ -537,17 +370,17 @@ public partial class MainWindow : Window
 
         var currentPoint = e.GetPosition(_zoomContainer);
 
-        // Calculate selection rectangle bounds
-        var left = Math.Min(_selectionStartPoint.X, currentPoint.X);
-        var top = Math.Min(_selectionStartPoint.Y, currentPoint.Y);
-        var width = Math.Abs(currentPoint.X - _selectionStartPoint.X);
-        var height = Math.Abs(currentPoint.Y - _selectionStartPoint.Y);
+        // Calculate geometry
+        var x = Math.Min(_selectionStartPoint.X, currentPoint.X);
+        var y = Math.Min(_selectionStartPoint.Y, currentPoint.Y);
+        var w = Math.Abs(currentPoint.X - _selectionStartPoint.X);
+        var h = Math.Abs(currentPoint.Y - _selectionStartPoint.Y);
 
-        // Update selection rectangle
-        Canvas.SetLeft(_selectionRectangle, left);
-        Canvas.SetTop(_selectionRectangle, top);
-        _selectionRectangle.Width = width;
-        _selectionRectangle.Height = height;
+        // Update Visuals
+        Canvas.SetLeft(_selectionRectangle, x);
+        Canvas.SetTop(_selectionRectangle, y);
+        _selectionRectangle.Width = w;
+        _selectionRectangle.Height = h;
 
         e.Handled = true;
     }
@@ -556,39 +389,36 @@ public partial class MainWindow : Window
     {
         if (!_isSelecting || _zoomContainer == null || _selectionRectangle == null) return;
 
+        // Finalize Selection
         var currentPoint = e.GetPosition(_zoomContainer);
+        var rectX = Math.Min(_selectionStartPoint.X, currentPoint.X);
+        var rectY = Math.Min(_selectionStartPoint.Y, currentPoint.Y);
+        var rectW = Math.Abs(currentPoint.X - _selectionStartPoint.X);
+        var rectH = Math.Abs(currentPoint.Y - _selectionStartPoint.Y);
 
-        // Calculate final selection rectangle in screen coordinates
-        var selLeft = Math.Min(_selectionStartPoint.X, currentPoint.X);
-        var selTop = Math.Min(_selectionStartPoint.Y, currentPoint.Y);
-        var selRight = Math.Max(_selectionStartPoint.X, currentPoint.X);
-        var selBottom = Math.Max(_selectionStartPoint.Y, currentPoint.Y);
+        var selectionRect = new Rect(rectX, rectY, rectW, rectH);
 
-        var selectionRect = new Rect(selLeft, selTop, selRight - selLeft, selBottom - selTop);
-
-        // Select modules that intersect with selection rectangle
+        // Select intersecting items
         foreach (var symbol in ViewModel.Symbols)
         {
-            // Direct coordinates
-            var moduleScreenPos = new Point(symbol.X, symbol.Y);
-            var moduleRect = new Rect(
-                moduleScreenPos.X - symbol.Width / 2,
-                moduleScreenPos.Y - symbol.Height / 2,
+            // Symbol bounds (centered at X, Y)
+            var symbolRect = new Rect(
+                symbol.X - symbol.Width / 2.0,
+                symbol.Y - symbol.Height / 2.0,
                 symbol.Width,
                 symbol.Height
             );
 
-            // Check intersection
-            if (selectionRect.Intersects(moduleRect))
+            if (selectionRect.Intersects(symbolRect))
             {
                 symbol.IsSelected = true;
             }
         }
 
-        // Hide selection rectangle
+        // Cleanup
         _selectionRectangle.IsVisible = false;
         _isSelecting = false;
-
+        e.Pointer.Capture(null);
         e.Handled = true;
     }
 
@@ -602,29 +432,80 @@ public partial class MainWindow : Window
 
     private async void BtnDinRail_Click(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // Simple input dialog
-        var rows = 1;
-        var modules = 24;
+        // Pokaż dialog konfiguracji szyny DIN
+        var dialog = new Dialogs.DinRailDialog();
+        await dialog.ShowDialog(this);
+
+        if (!dialog.Confirmed)
+            return;
+
+        var rows = dialog.Rows;
+        var modules = dialog.Modules;
 
         try
         {
-            var generator = new Services.DinRailGeneratorV2();
+            // Używamy generatora proceduralnego - zachowuje proporcje elementów
+            var generator = new Services.DinRailGeneratorProcedural();
             string svg = generator.Generate(rows, modules);
             var (width, height) = generator.GetDimensions(rows, modules);
 
             var dinRailDisplay = this.FindControl<Controls.DinRailView>("DinRailDisplay");
-            if (dinRailDisplay != null)
+            if (dinRailDisplay != null && _canvasContainer != null)
             {
-                dinRailDisplay.SetRail(svg, width, height);
+                // Pobierz wymiary widocznego obszaru (CanvasContainer)
+                double visibleWidth = _canvasContainer.Bounds.Width;
+                double visibleHeight = _canvasContainer.Bounds.Height;
+
+                // Dodaj margines bezpieczeństwa (50px z każdej strony)
+                const double margin = 50.0;
+                double availableWidth = visibleWidth - (2 * margin);
+                double availableHeight = visibleHeight - (2 * margin);
+
+                // Skalowanie proporcjonalne aby zmieścić całą szynę w widocznym obszarze
+                double scaleX = availableWidth / width;
+                double scaleY = availableHeight / height;
+                double scale = Math.Min(scaleX, scaleY);
+
+                // Nie powiększaj ponad 0.25 (żeby nie było za duże dla małych szyn)
+                scale = Math.Min(scale, 0.25);
+
+                // Zapisz skalę dla modułów
+                _dinRailScale = scale;
+
+                double scaledWidth = width * scale;
+                double scaledHeight = height * scale;
+
+                // Ustaw rozmiar szyny
+                dinRailDisplay.SetRail(svg, scaledWidth, scaledHeight);
+
+                // Wycentruj szynę w widocznym obszarze
+                double centerX = (visibleWidth - scaledWidth) / 2;
+                double centerY = (visibleHeight - scaledHeight) / 2;
+
+                Canvas.SetLeft(dinRailDisplay, centerX);
+                Canvas.SetTop(dinRailDisplay, centerY);
+
+                Services.AppLog.Info($"DIN Rail: {width}x{height} -> scaled: {scaledWidth:F0}x{scaledHeight:F0}, centered at ({centerX:F0}, {centerY:F0})");
                 ViewModel.IsDinRailVisible = true;
-                ViewModel.StatusMessage = $"Szyna DIN wygenerowana: {rows}x{modules}";
+                ViewModel.StatusMessage = $"Szyna DIN: {rows}x{modules} ({scaledWidth:F0}x{scaledHeight:F0})";
+
+                // --- OBLICZANIE OSI PRZYCIĄGANIA (MAGNETIC SNAP) ---
+                ViewModel.DinRailAxes.Clear();
+                var rawCenters = generator.GetRowCenters(rows);
+                foreach (var rawCenter in rawCenters)
+                {
+                    // Globalna współrzędna Y = (LokalnaY * Skala) + PrzesunięcieTop
+                    double globalY = (rawCenter * scale) + centerY;
+                    ViewModel.DinRailAxes.Add(globalY);
+                }
+                Services.AppLog.Info($"Wygenerowano {ViewModel.DinRailAxes.Count} osi przyciągania.");
             }
         }
         catch (Exception ex)
         {
             ViewModel.StatusMessage = $"Błąd: {ex.Message}";
         }
-
-        await Task.CompletedTask;
     }
+
+
 }
